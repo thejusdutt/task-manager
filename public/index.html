@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tasks</title>
+  <style>
+    :root {
+      --bg: #faf9f7;
+      --card: #ffffff;
+      --text: #2b2b29;
+      --muted: #9a958c;
+      --border: #eceae5;
+      --accent: #4a5568;
+      --high: #c2554d;
+      --low: #c9c4ba;
+      --done: #d8d4cc;
+      --shadow: 0 1px 2px rgba(60, 50, 40, 0.04);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 3.5rem 1rem;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 560px; margin: 0 auto; }
+
+    header { margin-bottom: 2rem; }
+    .head-row { display: flex; align-items: baseline; justify-content: space-between; }
+    header h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
+    header p { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
+    .signout { color: var(--muted); font-size: 0.8rem; text-decoration: none; transition: color 0.15s; }
+    .signout:hover { color: var(--text); }
+
+    /* Add form */
+    .add {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 0.5rem 0.9rem 0.9rem;
+      margin-bottom: 2rem;
+    }
+    .add-row { display: flex; gap: 0.5rem; }
+    .add input[type="text"] {
+      flex: 1;
+      border: none;
+      font-size: 1.02rem;
+      padding: 0.65rem 0.3rem;
+      background: transparent;
+      color: var(--text);
+    }
+    .add input[type="text"]::placeholder { color: var(--muted); }
+    .add input[type="text"]:focus { outline: none; }
+    .add-meta {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    select, input[type="date"] {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 0.35rem 0.55rem;
+      font-size: 0.82rem;
+      background: var(--bg);
+      color: var(--muted);
+      font-family: inherit;
+      cursor: pointer;
+    }
+    select:focus, input[type="date"]:focus { outline: none; border-color: var(--accent); }
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .btn-add {
+      margin-left: auto;
+      background: var(--accent);
+      color: #fff;
+      padding: 0.45rem 1.1rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      transition: opacity 0.15s;
+    }
+    .btn-add:hover { opacity: 0.88; }
+    .btn-add:disabled { opacity: 0.4; cursor: default; }
+
+    /* Filters */
+    .filters { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+    .filters button {
+      background: transparent;
+      color: var(--muted);
+      padding: 0.25rem 0.7rem;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      transition: color 0.15s, background 0.15s;
+    }
+    .filters button:hover { color: var(--text); }
+    .filters button.active { background: var(--text); color: var(--bg); }
+
+    /* List */
+    ul { list-style: none; }
+    .task {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 0.9rem 1rem;
+      margin-bottom: 0.5rem;
+      transition: border-color 0.15s;
+    }
+    .task:hover { border-color: #e0ddd6; }
+    .task.s-done { background: transparent; box-shadow: none; }
+    .task.s-done .title { text-decoration: line-through; color: var(--muted); }
+
+    .check {
+      appearance: none;
+      width: 19px; height: 19px;
+      min-width: 19px;
+      border: 1.5px solid #d6d2c9;
+      border-radius: 50%;
+      cursor: pointer;
+      margin-top: 2px;
+      position: relative;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .check:hover { border-color: var(--accent); }
+    .check:checked { background: var(--accent); border-color: var(--accent); }
+    .check:checked::after {
+      content: "✓";
+      color: #fff;
+      font-size: 11px;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+    }
+
+    .body { flex: 1; min-width: 0; }
+    .title { font-size: 0.96rem; word-break: break-word; display: flex; align-items: center; gap: 0.5rem; }
+    /* Priority as a quiet dot, not a printed word. Normal priority shows none. */
+    .dot { width: 6px; height: 6px; min-width: 6px; border-radius: 50%; }
+    .p-high .dot { background: var(--high); }
+    .p-low .dot { background: var(--low); }
+    .notes { font-size: 0.84rem; color: var(--muted); margin-top: 0.2rem; word-break: break-word; }
+    .sub { display: flex; gap: 0.75rem; margin-top: 0.3rem; font-size: 0.77rem; color: var(--muted); flex-wrap: wrap; align-items: center; }
+    .due.overdue { color: var(--high); }
+    .doing { color: var(--accent); }
+    .start { background: none; color: var(--muted); font-size: 0.77rem; padding: 0; transition: color 0.15s; }
+    .start:hover { color: var(--accent); }
+
+    .del {
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.15rem;
+      padding: 0 0.25rem;
+      line-height: 1;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.15s;
+    }
+    .task:hover .del { opacity: 0.6; }
+    .del:hover { opacity: 1 !important; color: var(--high); }
+    /* Touch devices have no hover — always show the delete button there. */
+    @media (hover: none) { .del { opacity: 1; } }
+
+    .empty { text-align: center; color: var(--muted); padding: 3.5rem 1rem; font-size: 0.88rem; }
+
+    /* Prevent iOS auto-zoom on focus (triggers when inputs are < 16px). */
+    input, select, textarea { font-size: 16px; }
+
+    /* Phones */
+    @media (max-width: 560px) {
+      body { padding: 1rem 0.75rem; padding-bottom: 2rem; }
+      header h1 { font-size: 1.4rem; }
+
+      /* Stack the add controls so each is easy to tap. */
+      .add-meta { flex-wrap: wrap; }
+      .add-meta select, .add-meta input[type="date"] { flex: 1; min-width: 0; }
+      .btn-add {
+        margin-left: 0;
+        flex-basis: 100%;
+        order: 3;
+        padding: 0.6rem 1rem;   /* taller, full-width, thumb-friendly */
+      }
+
+      /* Roomier rows and bigger checkbox for touch. */
+      .task { padding: 0.9rem; }
+      .check { width: 24px; height: 24px; min-width: 24px; }
+      .del { font-size: 1.4rem; padding: 0 0.4rem; }
+
+      /* Filter pills span the width evenly. */
+      .filters button { flex: 1; padding: 0.5rem 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="head-row">
+        <h1>Tasks</h1>
+        <a href="/api/logout" class="signout">Sign out</a>
+      </div>
+      <p id="summary"></p>
+    </header>
+
+    <form class="add" id="addForm">
+      <div class="add-row">
+        <input type="text" id="title" placeholder="Add a task…" autocomplete="off" />
+      </div>
+      <div class="add-meta">
+        <select id="priority" title="Priority">
+          <option value="low">Low</option>
+          <option value="normal" selected>Normal</option>
+          <option value="high">High</option>
+        </select>
+        <input type="date" id="due" title="Due date" />
+        <button type="submit" class="btn-add" id="addBtn">Add</button>
+      </div>
+    </form>
+
+    <div class="filters" id="filters">
+      <button data-filter="all" class="active">All</button>
+      <button data-filter="active">Active</button>
+      <button data-filter="done">Done</button>
+    </div>
+
+    <ul id="list"></ul>
+    <div class="empty" id="empty" hidden>Nothing here yet.</div>
+  </div>
+
+  <script>
+    const api = {
+      list:   ()        => fetch("/api/tasks").then(r => r.json()),
+      create: (data)    => fetch("/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+      update: (id, data) => fetch(`/api/tasks/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+      remove: (id)      => fetch(`/api/tasks/${id}`, { method: "DELETE" }).then(r => r.json()),
+    };
+
+    let tasks = [];
+    let filter = "all";
+
+    const el = {
+      list: document.getElementById("list"),
+      empty: document.getElementById("empty"),
+      summary: document.getElementById("summary"),
+      form: document.getElementById("addForm"),
+      title: document.getElementById("title"),
+      priority: document.getElementById("priority"),
+      due: document.getElementById("due"),
+      addBtn: document.getElementById("addBtn"),
+      filters: document.getElementById("filters"),
+    };
+
+    const todayISO = () => new Date().toISOString().slice(0, 10);
+
+    function esc(s) {
+      return (s || "").replace(/[&<>"']/g, c => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+      ));
+    }
+
+    function fmtDate(d) {
+      if (!d) return "";
+      const dt = new Date(d + "T00:00:00");
+      return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    }
+
+    function visible() {
+      if (filter === "active") return tasks.filter(t => t.status !== "done");
+      if (filter === "done") return tasks.filter(t => t.status === "done");
+      return tasks;
+    }
+
+    function render() {
+      const items = visible();
+      el.empty.hidden = items.length > 0;
+      el.list.innerHTML = items.map(t => {
+        const overdue = t.due_date && t.status !== "done" && t.due_date < todayISO();
+        const dot = t.priority !== "normal" ? `<span class="dot" title="${t.priority} priority"></span>` : "";
+        return `
+          <li class="task p-${t.priority} s-${t.status}" data-id="${t.id}">
+            <input type="checkbox" class="check" ${t.status === "done" ? "checked" : ""} title="Mark done" />
+            <div class="body">
+              <div class="title">${dot}<span>${esc(t.title)}</span></div>
+              ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
+              <div class="sub">
+                ${t.status === "doing" ? `<span class="doing">In progress</span>` : ""}
+                ${t.due_date ? `<span class="due ${overdue ? "overdue" : ""}">${overdue ? "Overdue · " : ""}${fmtDate(t.due_date)}</span>` : ""}
+                ${t.status !== "done" ? `<button class="start" type="button">${t.status === "doing" ? "Pause" : "Start"}</button>` : ""}
+              </div>
+            </div>
+            <button class="del" title="Delete" type="button">×</button>
+          </li>`;
+      }).join("");
+
+      const open = tasks.filter(t => t.status !== "done").length;
+      el.summary.textContent = tasks.length === 0
+        ? "No tasks yet"
+        : `${open} open · ${tasks.length} total`;
+    }
+
+    async function load() {
+      tasks = await api.list();
+      render();
+    }
+
+    el.form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const title = el.title.value.trim();
+      if (!title) return;
+      el.addBtn.disabled = true;
+      const created = await api.create({
+        title,
+        priority: el.priority.value,
+        due_date: el.due.value || null,
+      });
+      tasks.unshift(created);
+      el.title.value = "";
+      el.due.value = "";
+      el.priority.value = "normal";
+      el.addBtn.disabled = false;
+      el.title.focus();
+      await load();
+    });
+
+    el.filters.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      filter = btn.dataset.filter;
+      [...el.filters.children].forEach(b => b.classList.toggle("active", b === btn));
+      render();
+    });
+
+    el.list.addEventListener("click", async (e) => {
+      const li = e.target.closest(".task");
+      if (!li) return;
+      const id = Number(li.dataset.id);
+      const task = tasks.find(t => t.id === id);
+      if (!task) return;
+
+      if (e.target.classList.contains("check")) {
+        const status = task.status === "done" ? "todo" : "done";
+        await api.update(id, { status });
+        await load();
+      } else if (e.target.classList.contains("del")) {
+        await api.remove(id);
+        tasks = tasks.filter(t => t.id !== id);
+        render();
+      } else if (e.target.classList.contains("start")) {
+        const status = task.status === "doing" ? "todo" : "doing";
+        await api.update(id, { status });
+        await load();
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

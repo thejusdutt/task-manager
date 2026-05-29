@@ -1,0 +1,42 @@
+name = "task-manager"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Daily reminder email. Runs at 07:00 UTC every day; the Worker then emails any
+# tasks that are due today or overdue. Adjust the time/cadence as you like.
+[triggers]
+crons = ["0 7 * * *"]
+
+[vars]
+# Non-secret config only. The "from" address must be on a domain you've verified
+# in Resend (e.g. tasks@yourdomain.com), or Resend's sandbox "onboarding@resend.dev".
+REMINDER_FROM = "Tasks <onboarding@resend.dev>"
+
+# The following are stored as SECRETS (not in this file, so it's safe to commit).
+# Set each once with `npx wrangler secret put <NAME>`:
+#   AUTH_USER       login username
+#   AUTH_PASS       login password
+#   AUTH_SECRET     random string used to sign the session cookie
+#   REMINDER_TO     email address that reminder emails are sent to
+#   RESEND_API_KEY  Resend API key for sending email
+
+# Serve the static frontend (public/) directly from the Worker.
+# Requests that don't match a file fall through to the Worker fetch handler.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+# Serve files as-is; don't auto-drop ".html" (that turns ASSETS.fetch("/login.html")
+# into a 307 redirect to "/login", which loops against our Worker routing).
+html_handling = "none"
+# Run the Worker before serving any static asset, so the auth gate in
+# src/index.js applies to every request (otherwise assets bypass it).
+run_worker_first = true
+
+# D1 (SQLite) database binding.
+# Create it once with:  npx wrangler d1 create task-manager-db
+# then paste the printed database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "task-manager-db"
+database_id = "3fa5276e-bea2-4f0f-b880-702405f83115"
