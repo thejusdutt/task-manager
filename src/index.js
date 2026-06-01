@@ -2,7 +2,7 @@
 // Static files (index.html, etc.) are served automatically from /public via the
 // [assets] binding; anything under /api/* is handled here.
 
-const VALID_STATUS = ["todo", "doing", "done"];
+const VALID_STATUS = ["backlog", "todo", "doing", "done"];
 const VALID_PRIORITY = ["low", "normal", "high"];
 
 export default {
@@ -146,10 +146,11 @@ async function route(request, env, url) {
 }
 
 async function listTasks(env) {
+  // The board groups by status client-side, so we only need each column sorted:
+  // high priority first, then soonest due date (nulls last), then newest.
   const { results } = await env.DB.prepare(
     `SELECT * FROM tasks
      ORDER BY
-       CASE status WHEN 'doing' THEN 0 WHEN 'todo' THEN 1 ELSE 2 END,
        CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
        (due_date IS NULL), due_date,
        created_at DESC`
@@ -166,7 +167,7 @@ async function createTask(request, env) {
   const task = {
     title,
     notes: (body.notes || "").trim(),
-    status: VALID_STATUS.includes(body.status) ? body.status : "todo",
+    status: VALID_STATUS.includes(body.status) ? body.status : "backlog",
     priority: VALID_PRIORITY.includes(body.priority) ? body.priority : "normal",
     due_date: body.due_date || null,
   };

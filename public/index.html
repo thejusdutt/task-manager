@@ -6,29 +6,30 @@
   <title>Tasks</title>
   <style>
     :root {
-      --bg: #faf9f7;
+      --bg: #f4f5f7;
       --card: #ffffff;
-      --text: #2b2b29;
-      --muted: #9a958c;
-      --border: #eceae5;
+      --col: #ebecf0;
+      --text: #172b4d;
+      --muted: #6b778c;
+      --border: #dfe1e6;
       --accent: #4a5568;
       --high: #c2554d;
       --low: #c9c4ba;
-      --done: #d8d4cc;
-      --shadow: 0 1px 2px rgba(60, 50, 40, 0.04);
+      --shadow: 0 1px 1px rgba(9, 30, 66, 0.13);
+      --shadow-drag: 0 6px 14px rgba(9, 30, 66, 0.22);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.5;
-      padding: 3.5rem 1rem;
+      line-height: 1.45;
+      padding: 2rem 1.25rem;
       -webkit-font-smoothing: antialiased;
     }
-    .wrap { max-width: 560px; margin: 0 auto; }
+    .wrap { max-width: 1180px; margin: 0 auto; }
 
-    header { margin-bottom: 2rem; }
+    header { margin-bottom: 1.5rem; }
     .head-row { display: flex; align-items: baseline; justify-content: space-between; }
     header h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
     header p { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
@@ -39,194 +40,134 @@
     .add {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 12px;
       box-shadow: var(--shadow);
       padding: 0.5rem 0.9rem 0.9rem;
-      margin-bottom: 2rem;
+      margin-bottom: 1.75rem;
     }
     .add-row { display: flex; gap: 0.5rem; }
     .add input[type="text"] {
       flex: 1;
       border: none;
-      font-size: 1.02rem;
+      font-size: 16px;
       padding: 0.65rem 0.3rem;
       background: transparent;
       color: var(--text);
     }
     .add input[type="text"]::placeholder { color: var(--muted); }
     .add input[type="text"]:focus { outline: none; }
-    .add-meta {
-      display: flex;
-      gap: 0.5rem;
-      align-items: center;
-    }
+    .add-meta { display: flex; gap: 0.5rem; align-items: center; }
     select, input[type="date"] {
       border: 1px solid var(--border);
       border-radius: 9px;
       padding: 0.35rem 0.55rem;
-      font-size: 0.82rem;
+      font-size: 16px;
       background: var(--bg);
       color: var(--muted);
       font-family: inherit;
       cursor: pointer;
     }
     select:focus, input[type="date"]:focus { outline: none; border-color: var(--accent); }
-    button {
-      font-family: inherit;
-      cursor: pointer;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.9rem;
-    }
+    button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; font-size: 0.9rem; }
     .btn-add {
       margin-left: auto;
       background: var(--accent);
       color: #fff;
       padding: 0.45rem 1.1rem;
       font-weight: 500;
-      letter-spacing: 0.01em;
       transition: opacity 0.15s;
     }
     .btn-add:hover { opacity: 0.88; }
     .btn-add:disabled { opacity: 0.4; cursor: default; }
 
-    /* Filters */
-    .filters { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
-    .filters button {
-      background: transparent;
-      color: var(--muted);
-      padding: 0.25rem 0.7rem;
-      border-radius: 20px;
-      font-size: 0.82rem;
-      transition: color 0.15s, background 0.15s;
-    }
-    .filters button:hover { color: var(--text); }
-    .filters button.active { background: var(--text); color: var(--bg); }
-
-    /* List */
-    ul { list-style: none; }
-    .task {
+    /* Board */
+    .board {
       display: flex;
+      gap: 0.85rem;
       align-items: flex-start;
-      gap: 0.8rem;
-      background: var(--card);
-      border: 1px solid var(--border);
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+    }
+    .col {
+      flex: 1 1 0;
+      min-width: 250px;
+      background: var(--col);
       border-radius: 12px;
+      padding: 0.6rem 0.6rem 0.75rem;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .col.drop-target { background: #dce0e6; box-shadow: inset 0 0 0 2px var(--accent); }
+    .col-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.25rem 0.4rem 0.6rem;
+    }
+    .col-title { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+    .col-count {
+      font-size: 0.72rem; color: var(--muted);
+      background: rgba(9, 30, 66, 0.08);
+      border-radius: 10px; padding: 0.05rem 0.45rem; min-width: 1.4rem; text-align: center;
+    }
+    .col-body { list-style: none; min-height: 40px; display: flex; flex-direction: column; gap: 0.5rem; }
+    .col-empty { color: var(--muted); font-size: 0.78rem; text-align: center; padding: 0.9rem 0; opacity: 0.7; }
+
+    /* Card */
+    .card {
+      background: var(--card);
+      border-radius: 9px;
       box-shadow: var(--shadow);
-      padding: 0.9rem 1rem;
-      margin-bottom: 0.5rem;
-      transition: border-color 0.15s;
+      padding: 0.6rem 0.7rem;
+      cursor: grab;
+      transition: box-shadow 0.15s, transform 0.05s;
     }
-    .task:hover { border-color: #e0ddd6; }
-    .task.s-done { background: transparent; box-shadow: none; }
-    .task.s-done .title { text-decoration: line-through; color: var(--muted); }
+    .card:active { cursor: grabbing; }
+    .card.dragging { opacity: 0.5; box-shadow: var(--shadow-drag); }
+    .card.s-done .title span { text-decoration: line-through; color: var(--muted); }
 
-    .check {
-      appearance: none;
-      width: 19px; height: 19px;
-      min-width: 19px;
-      border: 1.5px solid #d6d2c9;
-      border-radius: 50%;
-      cursor: pointer;
-      margin-top: 2px;
-      position: relative;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .check:hover { border-color: var(--accent); }
-    .check:checked { background: var(--accent); border-color: var(--accent); }
-    .check:checked::after {
-      content: "✓";
-      color: #fff;
-      font-size: 11px;
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-    }
-
-    .body { flex: 1; min-width: 0; }
-    .title { font-size: 0.96rem; word-break: break-word; display: flex; align-items: center; gap: 0.5rem; }
-    /* Priority as a quiet dot, not a printed word. Normal priority shows none. */
-    .dot { width: 6px; height: 6px; min-width: 6px; border-radius: 50%; }
+    .card-head { display: flex; align-items: flex-start; gap: 0.4rem; }
+    .title { font-size: 0.9rem; word-break: break-word; display: flex; align-items: center; gap: 0.45rem; flex: 1; min-width: 0; }
+    .dot { width: 7px; height: 7px; min-width: 7px; border-radius: 50%; }
     .p-high .dot { background: var(--high); }
     .p-low .dot { background: var(--low); }
-    .notes { font-size: 0.84rem; color: var(--muted); margin-top: 0.2rem; word-break: break-word; }
-    .sub { display: flex; gap: 0.75rem; margin-top: 0.3rem; font-size: 0.77rem; color: var(--muted); flex-wrap: wrap; align-items: center; }
-    .due.overdue { color: var(--high); }
-    .doing { color: var(--accent); }
-    .start, .edit-btn { background: none; color: var(--muted); font-size: 0.77rem; padding: 0; transition: color 0.15s; }
-    .start:hover, .edit-btn:hover { color: var(--accent); }
+    .notes { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; word-break: break-word; }
+    .sub { display: flex; gap: 0.6rem; margin-top: 0.4rem; font-size: 0.74rem; color: var(--muted); flex-wrap: wrap; align-items: center; }
+    .due { background: rgba(9, 30, 66, 0.06); border-radius: 6px; padding: 0.05rem 0.4rem; }
+    .due.overdue { color: #fff; background: var(--high); }
 
-    /* Inline edit form (replaces a task row while editing) */
-    .task.editing { display: block; }
-    .edit { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; }
+    .card-actions { display: flex; gap: 0.1rem; opacity: 0; transition: opacity 0.15s; }
+    .card:hover .card-actions { opacity: 1; }
+    @media (hover: none) { .card-actions { opacity: 1; } }
+    .icon-btn { background: transparent; color: var(--muted); font-size: 0.95rem; line-height: 1; padding: 0.1rem 0.25rem; transition: color 0.15s; }
+    .icon-btn:hover { color: var(--text); }
+    .del:hover { color: var(--high); }
+
+    /* Inline edit (replaces a card while editing) */
+    .card.editing { cursor: default; }
+    .edit { display: flex; flex-direction: column; gap: 0.5rem; }
     .edit input[type="text"] {
       width: 100%;
       border: 1px solid var(--border);
-      border-radius: 9px;
-      padding: 0.5rem 0.6rem;
+      border-radius: 8px;
+      padding: 0.45rem 0.55rem;
       background: var(--bg);
       color: var(--text);
       font-family: inherit;
+      font-size: 16px;
     }
     .edit input[type="text"]:focus { outline: none; border-color: var(--accent); }
-    .edit-title { font-size: 1rem; font-weight: 500; }
-    .edit-meta { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-    .edit-meta select, .edit-meta input[type="date"] { color: var(--text); }
-    .btn-save {
-      background: var(--accent);
-      color: #fff;
-      padding: 0.4rem 0.9rem;
-      font-weight: 500;
-      transition: opacity 0.15s;
-    }
+    .edit-title { font-weight: 500; }
+    .edit-meta { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+    .edit-meta select, .edit-meta input[type="date"] { color: var(--text); font-size: 0.8rem; padding: 0.3rem 0.4rem; }
+    .edit-actions { display: flex; gap: 0.4rem; }
+    .btn-save { background: var(--accent); color: #fff; padding: 0.4rem 0.9rem; font-weight: 500; transition: opacity 0.15s; }
     .btn-save:hover { opacity: 0.88; }
     .btn-cancel { background: transparent; color: var(--muted); padding: 0.4rem 0.7rem; }
     .btn-cancel:hover { color: var(--text); }
-    @media (max-width: 560px) {
-      .edit-meta .btn-save, .edit-meta .btn-cancel { padding: 0.5rem 1rem; }
-    }
 
-    .del {
-      background: transparent;
-      color: var(--muted);
-      font-size: 1.15rem;
-      padding: 0 0.25rem;
-      line-height: 1;
-      opacity: 0;
-      transition: opacity 0.15s, color 0.15s;
-    }
-    .task:hover .del { opacity: 0.6; }
-    .del:hover { opacity: 1 !important; color: var(--high); }
-    /* Touch devices have no hover — always show the delete button there. */
-    @media (hover: none) { .del { opacity: 1; } }
-
-    .empty { text-align: center; color: var(--muted); padding: 3.5rem 1rem; font-size: 0.88rem; }
-
-    /* Prevent iOS auto-zoom on focus (triggers when inputs are < 16px). */
-    input, select, textarea { font-size: 16px; }
-
-    /* Phones */
-    @media (max-width: 560px) {
-      body { padding: 1rem 0.75rem; padding-bottom: 2rem; }
-      header h1 { font-size: 1.4rem; }
-
-      /* Stack the add controls so each is easy to tap. */
+    @media (max-width: 640px) {
+      body { padding: 1rem 0.75rem; }
       .add-meta { flex-wrap: wrap; }
       .add-meta select, .add-meta input[type="date"] { flex: 1; min-width: 0; }
-      .btn-add {
-        margin-left: 0;
-        flex-basis: 100%;
-        order: 3;
-        padding: 0.6rem 1rem;   /* taller, full-width, thumb-friendly */
-      }
-
-      /* Roomier rows and bigger checkbox for touch. */
-      .task { padding: 0.9rem; }
-      .check { width: 24px; height: 24px; min-width: 24px; }
-      .del { font-size: 1.4rem; padding: 0 0.4rem; }
-
-      /* Filter pills span the width evenly. */
-      .filters button { flex: 1; padding: 0.5rem 0; }
+      .btn-add { margin-left: 0; flex-basis: 100%; order: 3; padding: 0.6rem 1rem; }
     }
   </style>
 </head>
@@ -255,38 +196,48 @@
       </div>
     </form>
 
-    <div class="filters" id="filters">
-      <button data-filter="all" class="active">All</button>
-      <button data-filter="active">Active</button>
-      <button data-filter="done">Done</button>
+    <div class="board" id="board">
+      <section class="col" data-status="backlog">
+        <header class="col-head"><span class="col-title">Backlog</span><span class="col-count">0</span></header>
+        <ul class="col-body"></ul>
+      </section>
+      <section class="col" data-status="todo">
+        <header class="col-head"><span class="col-title">To Do</span><span class="col-count">0</span></header>
+        <ul class="col-body"></ul>
+      </section>
+      <section class="col" data-status="doing">
+        <header class="col-head"><span class="col-title">In Progress</span><span class="col-count">0</span></header>
+        <ul class="col-body"></ul>
+      </section>
+      <section class="col" data-status="done">
+        <header class="col-head"><span class="col-title">Done</span><span class="col-count">0</span></header>
+        <ul class="col-body"></ul>
+      </section>
     </div>
-
-    <ul id="list"></ul>
-    <div class="empty" id="empty" hidden>Nothing here yet.</div>
   </div>
 
   <script>
     const api = {
-      list:   ()        => fetch("/api/tasks").then(r => r.json()),
-      create: (data)    => fetch("/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
+      list:   ()         => fetch("/api/tasks").then(r => r.json()),
+      create: (data)     => fetch("/api/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
       update: (id, data) => fetch(`/api/tasks/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-      remove: (id)      => fetch(`/api/tasks/${id}`, { method: "DELETE" }).then(r => r.json()),
+      remove: (id)       => fetch(`/api/tasks/${id}`, { method: "DELETE" }).then(r => r.json()),
     };
 
-    let tasks = [];
-    let filter = "all";
-    let editingId = null;
+    const STATUSES = ["backlog", "todo", "doing", "done"];
 
+    let tasks = [];
+    let editingId = null;
+    let draggingId = null;
+
+    const board = document.getElementById("board");
     const el = {
-      list: document.getElementById("list"),
-      empty: document.getElementById("empty"),
       summary: document.getElementById("summary"),
       form: document.getElementById("addForm"),
       title: document.getElementById("title"),
       priority: document.getElementById("priority"),
       due: document.getElementById("due"),
       addBtn: document.getElementById("addBtn"),
-      filters: document.getElementById("filters"),
     };
 
     const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -303,15 +254,16 @@
       return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     }
 
-    function visible() {
-      if (filter === "active") return tasks.filter(t => t.status !== "done");
-      if (filter === "done") return tasks.filter(t => t.status === "done");
-      return tasks;
+    function statusOptions(current) {
+      const labels = { backlog: "Backlog", todo: "To Do", doing: "In Progress", done: "Done" };
+      return STATUSES.map(s =>
+        `<option value="${s}" ${s === current ? "selected" : ""}>${labels[s]}</option>`
+      ).join("");
     }
 
-    function editRow(t) {
+    function editCard(t) {
       return `
-        <li class="task editing" data-id="${t.id}">
+        <li class="card editing" data-id="${t.id}">
           <form class="edit">
             <input type="text" class="edit-title" value="${esc(t.title)}" placeholder="Task title" />
             <input type="text" class="edit-notes" value="${esc(t.notes)}" placeholder="Notes (optional)" />
@@ -321,7 +273,10 @@
                 <option value="normal" ${t.priority === "normal" ? "selected" : ""}>Normal</option>
                 <option value="high" ${t.priority === "high" ? "selected" : ""}>High</option>
               </select>
+              <select class="edit-status" title="Status">${statusOptions(t.status)}</select>
               <input type="date" class="edit-due" title="Due date" value="${t.due_date || ""}" />
+            </div>
+            <div class="edit-actions">
               <button type="submit" class="btn-save">Save</button>
               <button type="button" class="btn-cancel">Cancel</button>
             </div>
@@ -329,32 +284,40 @@
         </li>`;
     }
 
-    function render() {
-      const items = visible();
-      el.empty.hidden = items.length > 0;
-      el.list.innerHTML = items.map(t => {
-        if (t.id === editingId) return editRow(t);
-        const overdue = t.due_date && t.status !== "done" && t.due_date < todayISO();
-        const dot = t.priority !== "normal" ? `<span class="dot" title="${t.priority} priority"></span>` : "";
-        return `
-          <li class="task p-${t.priority} s-${t.status}" data-id="${t.id}">
-            <input type="checkbox" class="check" ${t.status === "done" ? "checked" : ""} title="Mark done" />
-            <div class="body">
-              <div class="title">${dot}<span>${esc(t.title)}</span></div>
-              ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
-              <div class="sub">
-                ${t.status === "doing" ? `<span class="doing">In progress</span>` : ""}
-                ${t.due_date ? `<span class="due ${overdue ? "overdue" : ""}">${overdue ? "Overdue · " : ""}${fmtDate(t.due_date)}</span>` : ""}
-                ${t.status !== "done" ? `<button class="start" type="button">${t.status === "doing" ? "Pause" : "Start"}</button>` : ""}
-                <button class="edit-btn" type="button">Edit</button>
-              </div>
+    function viewCard(t) {
+      const overdue = t.due_date && t.status !== "done" && t.due_date < todayISO();
+      const dot = t.priority !== "normal" ? `<span class="dot" title="${t.priority} priority"></span>` : "";
+      const sub = (t.due_date) ? `
+        <div class="sub">
+          ${t.due_date ? `<span class="due ${overdue ? "overdue" : ""}">${overdue ? "Overdue · " : ""}${fmtDate(t.due_date)}</span>` : ""}
+        </div>` : "";
+      return `
+        <li class="card p-${t.priority} s-${t.status}" draggable="true" data-id="${t.id}">
+          <div class="card-head">
+            <div class="title">${dot}<span>${esc(t.title)}</span></div>
+            <div class="card-actions">
+              <button class="icon-btn edit-btn" title="Edit" type="button">✎</button>
+              <button class="icon-btn del" title="Delete" type="button">×</button>
             </div>
-            <button class="del" title="Delete" type="button">×</button>
-          </li>`;
-      }).join("");
+          </div>
+          ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
+          ${sub}
+        </li>`;
+    }
+
+    function render() {
+      board.querySelectorAll(".col").forEach(col => {
+        const status = col.dataset.status;
+        const items = tasks.filter(t => t.status === status);
+        const body = col.querySelector(".col-body");
+        body.innerHTML = items.length
+          ? items.map(t => (t.id === editingId ? editCard(t) : viewCard(t))).join("")
+          : `<li class="col-empty">Drop here</li>`;
+        col.querySelector(".col-count").textContent = items.length;
+      });
 
       if (editingId != null) {
-        const input = el.list.querySelector(".edit-title");
+        const input = board.querySelector(".edit-title");
         if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
       }
 
@@ -369,17 +332,17 @@
       render();
     }
 
+    // --- add ---
     el.form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const title = el.title.value.trim();
       if (!title) return;
       el.addBtn.disabled = true;
-      const created = await api.create({
+      await api.create({
         title,
         priority: el.priority.value,
         due_date: el.due.value || null,
       });
-      tasks.unshift(created);
       el.title.value = "";
       el.due.value = "";
       el.priority.value = "normal";
@@ -388,35 +351,18 @@
       await load();
     });
 
-    el.filters.addEventListener("click", (e) => {
-      const btn = e.target.closest("button");
-      if (!btn) return;
-      filter = btn.dataset.filter;
-      [...el.filters.children].forEach(b => b.classList.toggle("active", b === btn));
-      render();
-    });
+    // --- card actions (edit / delete / cancel) ---
+    board.addEventListener("click", async (e) => {
+      const cardEl = e.target.closest(".card");
+      if (!cardEl) return;
+      const id = Number(cardEl.dataset.id);
 
-    el.list.addEventListener("click", async (e) => {
-      const li = e.target.closest(".task");
-      if (!li) return;
-      const id = Number(li.dataset.id);
-      const task = tasks.find(t => t.id === id);
-      if (!task) return;
-
-      if (e.target.classList.contains("check")) {
-        const status = task.status === "done" ? "todo" : "done";
-        await api.update(id, { status });
-        await load();
+      if (e.target.classList.contains("edit-btn")) {
+        editingId = id;
+        render();
       } else if (e.target.classList.contains("del")) {
         await api.remove(id);
         tasks = tasks.filter(t => t.id !== id);
-        render();
-      } else if (e.target.classList.contains("start")) {
-        const status = task.status === "doing" ? "todo" : "doing";
-        await api.update(id, { status });
-        await load();
-      } else if (e.target.classList.contains("edit-btn")) {
-        editingId = id;
         render();
       } else if (e.target.classList.contains("btn-cancel")) {
         editingId = null;
@@ -424,21 +370,63 @@
       }
     });
 
-    // Save an inline edit (the edit form lives inside the list).
-    el.list.addEventListener("submit", async (e) => {
+    // --- save inline edit ---
+    board.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const li = e.target.closest(".task");
-      if (!li) return;
-      const id = Number(li.dataset.id);
-      const title = li.querySelector(".edit-title").value.trim();
-      if (!title) { li.querySelector(".edit-title").focus(); return; }
+      const cardEl = e.target.closest(".card");
+      if (!cardEl) return;
+      const id = Number(cardEl.dataset.id);
+      const title = cardEl.querySelector(".edit-title").value.trim();
+      if (!title) { cardEl.querySelector(".edit-title").focus(); return; }
       await api.update(id, {
         title,
-        notes: li.querySelector(".edit-notes").value.trim(),
-        priority: li.querySelector(".edit-priority").value,
-        due_date: li.querySelector(".edit-due").value || null,
+        notes: cardEl.querySelector(".edit-notes").value.trim(),
+        priority: cardEl.querySelector(".edit-priority").value,
+        status: cardEl.querySelector(".edit-status").value,
+        due_date: cardEl.querySelector(".edit-due").value || null,
       });
       editingId = null;
+      await load();
+    });
+
+    // --- drag and drop between columns ---
+    board.addEventListener("dragstart", (e) => {
+      const cardEl = e.target.closest(".card");
+      if (!cardEl || cardEl.classList.contains("editing")) return;
+      draggingId = Number(cardEl.dataset.id);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(draggingId));
+      // Defer so the drag image is captured before the card dims.
+      requestAnimationFrame(() => cardEl.classList.add("dragging"));
+    });
+
+    board.addEventListener("dragend", () => {
+      draggingId = null;
+      board.querySelectorAll(".dragging").forEach(c => c.classList.remove("dragging"));
+      board.querySelectorAll(".drop-target").forEach(c => c.classList.remove("drop-target"));
+    });
+
+    board.addEventListener("dragover", (e) => {
+      const col = e.target.closest(".col");
+      if (!col || draggingId == null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      board.querySelectorAll(".col.drop-target").forEach(c => { if (c !== col) c.classList.remove("drop-target"); });
+      col.classList.add("drop-target");
+    });
+
+    board.addEventListener("drop", async (e) => {
+      const col = e.target.closest(".col");
+      if (!col) return;
+      e.preventDefault();
+      col.classList.remove("drop-target");
+      const id = Number(e.dataTransfer.getData("text/plain")) || draggingId;
+      const status = col.dataset.status;
+      const task = tasks.find(t => t.id === id);
+      if (!task || task.status === status) return;
+      task.status = status;        // optimistic move
+      render();
+      await api.update(id, { status });
       await load();
     });
 

@@ -47,4 +47,7 @@ That's it — Wrangler prints your live `*.workers.dev` URL.
 | PATCH  | `/api/tasks/:id`  | any subset of the above                         |
 | DELETE | `/api/tasks/:id`  | —                                               |
 
-`status`: `todo` \| `doing` \| `done` · `priority`: `low` \| `normal` \| `high`
+`status`: `backlog` \| `todo` \| `doing` \| `done` · `priority`: `low` \| `normal` \| `high`
+
+The frontend is a Kanban board: drag cards between **Backlog → To Do → In Progress → Done**
+(each drag PATCHes the task's `status`). New tasks land in **Backlog**.
