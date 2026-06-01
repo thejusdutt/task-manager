@@ -153,8 +153,38 @@
     .sub { display: flex; gap: 0.75rem; margin-top: 0.3rem; font-size: 0.77rem; color: var(--muted); flex-wrap: wrap; align-items: center; }
     .due.overdue { color: var(--high); }
     .doing { color: var(--accent); }
-    .start { background: none; color: var(--muted); font-size: 0.77rem; padding: 0; transition: color 0.15s; }
-    .start:hover { color: var(--accent); }
+    .start, .edit-btn { background: none; color: var(--muted); font-size: 0.77rem; padding: 0; transition: color 0.15s; }
+    .start:hover, .edit-btn:hover { color: var(--accent); }
+
+    /* Inline edit form (replaces a task row while editing) */
+    .task.editing { display: block; }
+    .edit { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; }
+    .edit input[type="text"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 0.5rem 0.6rem;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+    }
+    .edit input[type="text"]:focus { outline: none; border-color: var(--accent); }
+    .edit-title { font-size: 1rem; font-weight: 500; }
+    .edit-meta { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .edit-meta select, .edit-meta input[type="date"] { color: var(--text); }
+    .btn-save {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.4rem 0.9rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+    .btn-save:hover { opacity: 0.88; }
+    .btn-cancel { background: transparent; color: var(--muted); padding: 0.4rem 0.7rem; }
+    .btn-cancel:hover { color: var(--text); }
+    @media (max-width: 560px) {
+      .edit-meta .btn-save, .edit-meta .btn-cancel { padding: 0.5rem 1rem; }
+    }
 
     .del {
       background: transparent;
@@ -245,6 +275,7 @@
 
     let tasks = [];
     let filter = "all";
+    let editingId = null;
 
     const el = {
       list: document.getElementById("list"),
@@ -278,10 +309,31 @@
       return tasks;
     }
 
+    function editRow(t) {
+      return `
+        <li class="task editing" data-id="${t.id}">
+          <form class="edit">
+            <input type="text" class="edit-title" value="${esc(t.title)}" placeholder="Task title" />
+            <input type="text" class="edit-notes" value="${esc(t.notes)}" placeholder="Notes (optional)" />
+            <div class="edit-meta">
+              <select class="edit-priority" title="Priority">
+                <option value="low" ${t.priority === "low" ? "selected" : ""}>Low</option>
+                <option value="normal" ${t.priority === "normal" ? "selected" : ""}>Normal</option>
+                <option value="high" ${t.priority === "high" ? "selected" : ""}>High</option>
+              </select>
+              <input type="date" class="edit-due" title="Due date" value="${t.due_date || ""}" />
+              <button type="submit" class="btn-save">Save</button>
+              <button type="button" class="btn-cancel">Cancel</button>
+            </div>
+          </form>
+        </li>`;
+    }
+
     function render() {
       const items = visible();
       el.empty.hidden = items.length > 0;
       el.list.innerHTML = items.map(t => {
+        if (t.id === editingId) return editRow(t);
         const overdue = t.due_date && t.status !== "done" && t.due_date < todayISO();
         const dot = t.priority !== "normal" ? `<span class="dot" title="${t.priority} priority"></span>` : "";
         return `
@@ -294,11 +346,17 @@
                 ${t.status === "doing" ? `<span class="doing">In progress</span>` : ""}
                 ${t.due_date ? `<span class="due ${overdue ? "overdue" : ""}">${overdue ? "Overdue · " : ""}${fmtDate(t.due_date)}</span>` : ""}
                 ${t.status !== "done" ? `<button class="start" type="button">${t.status === "doing" ? "Pause" : "Start"}</button>` : ""}
+                <button class="edit-btn" type="button">Edit</button>
               </div>
             </div>
             <button class="del" title="Delete" type="button">×</button>
           </li>`;
       }).join("");
+
+      if (editingId != null) {
+        const input = el.list.querySelector(".edit-title");
+        if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+      }
 
       const open = tasks.filter(t => t.status !== "done").length;
       el.summary.textContent = tasks.length === 0
@@ -357,7 +415,31 @@
         const status = task.status === "doing" ? "todo" : "doing";
         await api.update(id, { status });
         await load();
+      } else if (e.target.classList.contains("edit-btn")) {
+        editingId = id;
+        render();
+      } else if (e.target.classList.contains("btn-cancel")) {
+        editingId = null;
+        render();
       }
+    });
+
+    // Save an inline edit (the edit form lives inside the list).
+    el.list.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const li = e.target.closest(".task");
+      if (!li) return;
+      const id = Number(li.dataset.id);
+      const title = li.querySelector(".edit-title").value.trim();
+      if (!title) { li.querySelector(".edit-title").focus(); return; }
+      await api.update(id, {
+        title,
+        notes: li.querySelector(".edit-notes").value.trim(),
+        priority: li.querySelector(".edit-priority").value,
+        due_date: li.querySelector(".edit-due").value || null,
+      });
+      editingId = null;
+      await load();
     });
 
     load();
