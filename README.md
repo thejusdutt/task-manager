@@ -47,7 +47,19 @@ That's it — Wrangler prints your live `*.workers.dev` URL.
 | PATCH  | `/api/tasks/:id`  | any subset of the above                         |
 | DELETE | `/api/tasks/:id`  | —                                               |
 
-`status`: `backlog` \| `todo` \| `doing` \| `done` · `priority`: `low` \| `normal` \| `high`
+`status`: `backlog` \| `todo` \| `doing` \| `revisit` \| `done` · `priority`: `low` \| `normal` \| `high`
 
-The frontend is a Kanban board: drag cards between **Backlog → To Do → In Progress → Done**
-(each drag PATCHes the task's `status`). New tasks land in **Backlog**.
+The frontend is a Kanban board: drag cards between **Backlog → To Do → In Progress → To Be Revisited → Done**
+(each drag PATCHes the task's `status`). New tasks land in **Backlog**. On touch devices,
+where drag-and-drop doesn't fire, each card shows a status dropdown to move it between columns instead.
+
+## Reminder emails
+
+A daily Cron Trigger (07:00 UTC, see `wrangler.toml`) sends two kinds of email via Resend:
+
+- **Due reminders** — any not-`done` task that's due today or overdue, emailed once.
+- **Revisit reminders** — any task parked in **To Be Revisited**, emailed once a month:
+  the first nudge a month after it entered the column, then again every month it stays
+  there. Moving the task out of the column stops and resets the clock.
+
+Emails only send when `RESEND_API_KEY` (and the other reminder secrets) are configured.

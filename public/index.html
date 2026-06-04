@@ -90,7 +90,7 @@
     }
     .col {
       flex: 1 1 0;
-      min-width: 250px;
+      min-width: 0;
       background: var(--col);
       border-radius: 12px;
       padding: 0.6rem 0.6rem 0.75rem;
@@ -112,6 +112,7 @@
     .col[data-status="backlog"] .col-title::before { background: #8993a4; }
     .col[data-status="todo"]    .col-title::before { background: #4c9aff; }
     .col[data-status="doing"]   .col-title::before { background: #ffab00; }
+    .col[data-status="revisit"] .col-title::before { background: #6554c0; }
     .col[data-status="done"]    .col-title::before { background: #36b37e; }
     .col-count {
       font-size: 0.72rem; color: var(--muted);
@@ -153,6 +154,31 @@
     .due { background: rgba(9, 30, 66, 0.06); border-radius: 6px; padding: 0.05rem 0.4rem; }
     .due.overdue { color: #fff; background: var(--high); }
 
+    /* Per-card status picker: a touch-friendly alternative to drag-and-drop.
+       Desktop devices drag cards between columns, so it's hidden there to keep
+       the board clean. On touch devices (no hover) HTML5 drag never fires, so
+       this becomes the primary way to move a card. */
+    .move-status {
+      display: none;
+      margin-left: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.1rem 0.3rem;
+      font-size: 0.74rem;
+      background: var(--bg);
+      color: var(--muted);
+      font-family: inherit;
+      cursor: pointer;
+    }
+    @media (hover: none) {
+      .move-status { display: inline-block; }
+    }
+    /* A card with no due date has nothing else in its sub row, so on desktop
+       (where the picker is hidden) collapse the empty row to avoid a stray gap. */
+    @media (hover: hover) {
+      .sub.sub-bare { display: none; }
+    }
+
     .card-actions { display: flex; gap: 0.1rem; opacity: 0; transition: opacity 0.15s; }
     .card:hover .card-actions { opacity: 1; }
     @media (hover: none) { .card-actions { opacity: 1; } }
@@ -182,6 +208,12 @@
     .btn-save:hover { opacity: 0.88; }
     .btn-cancel { background: transparent; color: var(--muted); padding: 0.4rem 0.7rem; }
     .btn-cancel:hover { color: var(--text); }
+
+    /* Below this width five equal columns get too cramped, so let them keep a
+       readable minimum and bring back horizontal scroll. */
+    @media (max-width: 900px) {
+      .col { min-width: 220px; }
+    }
 
     @media (max-width: 640px) {
       body { padding: 1rem 0.75rem; }
@@ -229,6 +261,10 @@
         <header class="col-head"><span class="col-title">In Progress</span><span class="col-count">0</span></header>
         <ul class="col-body"></ul>
       </section>
+      <section class="col" data-status="revisit">
+        <header class="col-head"><span class="col-title">To Be Revisited</span><span class="col-count">0</span></header>
+        <ul class="col-body"></ul>
+      </section>
       <section class="col" data-status="done">
         <header class="col-head"><span class="col-title">Done</span><span class="col-count">0</span></header>
         <ul class="col-body"></ul>
@@ -244,7 +280,7 @@
       remove: (id)       => fetch(`/api/tasks/${id}`, { method: "DELETE" }).then(r => r.json()),
     };
 
-    const STATUSES = ["backlog", "todo", "doing", "done"];
+    const STATUSES = ["backlog", "todo", "doing", "revisit", "done"];
 
     let tasks = [];
     let editingId = null;
@@ -275,7 +311,7 @@
     }
 
     function statusOptions(current) {
-      const labels = { backlog: "Backlog", todo: "To Do", doing: "In Progress", done: "Done" };
+      const labels = { backlog: "Backlog", todo: "To Do", doing: "In Progress", revisit: "To Be Revisited", done: "Done" };
       return STATUSES.map(s =>
         `<option value="${s}" ${s === current ? "selected" : ""}>${labels[s]}</option>`
       ).join("");
@@ -307,10 +343,11 @@
     function viewCard(t) {
       const overdue = t.due_date && t.status !== "done" && t.due_date < todayISO();
       const dot = t.priority !== "normal" ? `<span class="dot" title="${t.priority} priority"></span>` : "";
-      const sub = (t.due_date) ? `
-        <div class="sub">
-          ${t.due_date ? `<span class="due ${overdue ? "overdue" : ""}">${overdue ? "Overdue · " : ""}${fmtDate(t.due_date)}</span>` : ""}
-        </div>` : "";
+      const due = t.due_date
+        ? `<span class="due ${overdue ? "overdue" : ""}">${overdue ? "Overdue · " : ""}${fmtDate(t.due_date)}</span>`
+        : "";
+      // The sub row always carries the touch-only status picker; mark it "bare"
+      // when there's no due date so desktop can collapse the otherwise-empty row.
       return `
         <li class="card p-${t.priority} s-${t.status}" draggable="true" data-id="${t.id}">
           <div class="card-head">
@@ -321,7 +358,10 @@
             </div>
           </div>
           ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
-          ${sub}
+          <div class="sub${t.due_date ? "" : " sub-bare"}">
+            ${due}
+            <select class="move-status" aria-label="Move task to column">${statusOptions(t.status)}</select>
+          </div>
         </li>`;
     }
 
@@ -406,6 +446,21 @@
         due_date: cardEl.querySelector(".edit-due").value || null,
       });
       editingId = null;
+      await load();
+    });
+
+    // --- move via the per-card status picker (touch-friendly; see .move-status) ---
+    board.addEventListener("change", async (e) => {
+      if (!e.target.classList.contains("move-status")) return;
+      const cardEl = e.target.closest(".card");
+      if (!cardEl) return;
+      const id = Number(cardEl.dataset.id);
+      const status = e.target.value;
+      const task = tasks.find(t => t.id === id);
+      if (!task || task.status === status) return;
+      task.status = status;        // optimistic move
+      render();
+      await api.update(id, { status });
       await load();
     });
 
