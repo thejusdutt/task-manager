@@ -2,7 +2,7 @@
 // Static files (index.html, etc.) are served automatically from /public via the
 // [assets] binding; anything under /api/* is handled here.
 
-const VALID_STATUS = ["backlog", "todo", "doing", "done"];
+const VALID_STATUS = ["backlog", "todo", "doing", "revisit", "done"];
 const VALID_PRIORITY = ["low", "normal", "high"];
 
 export default {
@@ -50,20 +50,21 @@ export default {
 
   // Invoked by the Cron Trigger (see [triggers] in wrangler.toml).
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(sendDueReminders(env));
+    ctx.waitUntil(Promise.all([sendDueReminders(env), sendRevisitReminders(env)]));
   },
 };
 
 // --- reminders ---------------------------------------------------------------
 
-// Find tasks that are due today or overdue, not yet done, and not already
+// Find tasks that are due today or overdue, still active, and not already
 // reminded — then email them and stamp reminded_at so we don't repeat.
+// 'revisit' tasks are excluded: parked tasks get the monthly nudge instead.
 async function sendDueReminders(env) {
   const today = new Date().toISOString().slice(0, 10);
 
   const { results } = await env.DB.prepare(
     `SELECT * FROM tasks
-     WHERE status != 'done'
+     WHERE status NOT IN ('done', 'revisit')
        AND due_date IS NOT NULL
        AND due_date <= ?
        AND reminded_at IS NULL
@@ -73,11 +74,6 @@ async function sendDueReminders(env) {
     .all();
 
   if (!results || results.length === 0) return;
-
-  if (!env.RESEND_API_KEY) {
-    console.log(`${results.length} task(s) due, but RESEND_API_KEY is not set — skipping email.`);
-    return;
-  }
 
   const lines = results.map((t) => {
     const overdue = t.due_date < today;
@@ -90,24 +86,8 @@ async function sendDueReminders(env) {
     lines.join("\n") +
     `\n\n— your task manager`;
 
-  const resp = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env.RESEND_API_KEY}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      from: env.REMINDER_FROM,
-      to: env.REMINDER_TO,
-      subject: `⏰ ${results.length} task(s) due`,
-      text,
-    }),
-  });
-
-  if (!resp.ok) {
-    console.log(`Resend send failed: ${resp.status} ${await resp.text()}`);
-    return;
-  }
+  const sent = await sendEmail(env, `⏰ ${results.length} task(s) due`, text);
+  if (!sent) return;
 
   // Mark them reminded so the next run doesn't email them again.
   const now = new Date().toISOString();
@@ -120,6 +100,88 @@ async function sendDueReminders(env) {
     .run();
 
   console.log(`Sent reminder for ${ids.length} task(s).`);
+}
+
+// Email tasks parked in 'revisit' once a month: the first nudge lands a month
+// after the task entered the column, then again every month it stays there.
+async function sendRevisitReminders(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT * FROM tasks WHERE status = 'revisit' AND revisit_at IS NOT NULL`
+  ).all();
+
+  if (!results || results.length === 0) return;
+
+  const now = new Date();
+  // A task is due for a nudge once a month has passed since the later of its
+  // last revisit email and the moment it entered the column.
+  const due = results.filter((t) => {
+    const since = t.revisit_reminded_at || t.revisit_at;
+    return now >= addOneMonth(since);
+  });
+
+  if (due.length === 0) return;
+
+  const lines = due.map((t) => {
+    const since = t.revisit_at.slice(0, 10);
+    return `• ${t.title} — to be revisited (parked since ${since})${t.priority === "high" ? "  [high]" : ""}`;
+  });
+
+  const text =
+    `You have ${due.length} task(s) waiting to be revisited:\n\n` +
+    lines.join("\n") +
+    `\n\n— your task manager`;
+
+  const sent = await sendEmail(env, `🔁 ${due.length} task(s) to revisit`, text);
+  if (!sent) return;
+
+  // Stamp them so the next nudge is a month out from now.
+  const nowIso = now.toISOString();
+  const ids = due.map((t) => t.id);
+  const placeholders = ids.map(() => "?").join(",");
+  await env.DB.prepare(
+    `UPDATE tasks SET revisit_reminded_at = ? WHERE id IN (${placeholders})`
+  )
+    .bind(nowIso, ...ids)
+    .run();
+
+  console.log(`Sent revisit reminder for ${ids.length} task(s).`);
+}
+
+// Calendar-month step: handles month lengths and year rollover (e.g. Jan 31 → Feb 28).
+function addOneMonth(iso) {
+  const d = new Date(iso);
+  d.setMonth(d.getMonth() + 1);
+  return d;
+}
+
+// Send one email via Resend. Returns true on success, false if it was skipped
+// (no API key) or the API rejected it — callers use this to decide whether to
+// record that the reminder went out.
+async function sendEmail(env, subject, text) {
+  if (!env.RESEND_API_KEY) {
+    console.log(`Email "${subject}" skipped — RESEND_API_KEY is not set.`);
+    return false;
+  }
+
+  const resp = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      from: env.REMINDER_FROM,
+      to: env.REMINDER_TO,
+      subject,
+      text,
+    }),
+  });
+
+  if (!resp.ok) {
+    console.log(`Resend send failed: ${resp.status} ${await resp.text()}`);
+    return false;
+  }
+  return true;
 }
 
 async function route(request, env, url) {
@@ -171,12 +233,14 @@ async function createTask(request, env) {
     priority: VALID_PRIORITY.includes(body.priority) ? body.priority : "normal",
     due_date: body.due_date || null,
   };
+  // Start the monthly-revisit clock if the task is created straight into 'revisit'.
+  const revisitAt = task.status === "revisit" ? now : null;
 
   const { meta } = await env.DB.prepare(
-    `INSERT INTO tasks (title, notes, status, priority, due_date, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (title, notes, status, priority, due_date, revisit_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(task.title, task.notes, task.status, task.priority, task.due_date, now, now)
+    .bind(task.title, task.notes, task.status, task.priority, task.due_date, revisitAt, now, now)
     .run();
 
   const row = await env.DB.prepare("SELECT * FROM tasks WHERE id = ?")
@@ -203,6 +267,19 @@ async function updateTask(request, env, id) {
     values.push(body.notes.trim());
   }
   if (VALID_STATUS.includes(body.status)) {
+    if (body.status === "revisit") {
+      // Entering 'revisit' starts the monthly clock; re-saving an already-parked
+      // task leaves its existing timestamps untouched (CASE reads the old row).
+      fields.push("revisit_at = CASE WHEN status = 'revisit' THEN revisit_at ELSE ? END");
+      values.push(new Date().toISOString());
+      fields.push(
+        "revisit_reminded_at = CASE WHEN status = 'revisit' THEN revisit_reminded_at ELSE NULL END"
+      );
+    } else {
+      // Leaving 'revisit' stops and resets the clock.
+      fields.push("revisit_at = NULL");
+      fields.push("revisit_reminded_at = NULL");
+    }
     fields.push("status = ?");
     values.push(body.status);
   }
