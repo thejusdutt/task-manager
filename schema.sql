@@ -6,12 +6,13 @@ CREATE TABLE IF NOT EXISTS tasks (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   title       TEXT    NOT NULL,
   notes       TEXT    NOT NULL DEFAULT '',
-  status      TEXT    NOT NULL DEFAULT 'backlog', -- backlog | todo | doing | revisit | done
+  status      TEXT    NOT NULL DEFAULT 'backlog', -- backlog | todo | doing | revisit | done | archived
   priority    TEXT    NOT NULL DEFAULT 'normal', -- low | normal | high
   due_date    TEXT,                              -- ISO date (YYYY-MM-DD) or NULL
   reminded_at TEXT,                              -- when a due-reminder email was last sent, or NULL
   revisit_at  TEXT,                              -- when the task was moved to 'revisit', or NULL
   revisit_reminded_at TEXT,                      -- when the last monthly revisit email was sent, or NULL
+  done_at     TEXT,                              -- when the task was moved to 'done', or NULL
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
@@ -24,3 +25,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_due    ON tasks(due_date);
 -- so only run these once against an already-populated database:
 --   ALTER TABLE tasks ADD COLUMN revisit_at TEXT;
 --   ALTER TABLE tasks ADD COLUMN revisit_reminded_at TEXT;
+--
+-- Migration for databases created before 'done_at' existed. Backfill from
+-- updated_at so already-finished tasks get an archive clock:
+--   ALTER TABLE tasks ADD COLUMN done_at TEXT;
+--   UPDATE tasks SET done_at = updated_at WHERE status = 'done' AND done_at IS NULL;
