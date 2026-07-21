@@ -2,7 +2,7 @@
 // Static files (index.html, etc.) are served automatically from /public via the
 // [assets] binding; anything under /api/* is handled here.
 
-const VALID_STATUS = ["backlog", "todo", "doing", "revisit", "done"];
+const VALID_STATUS = ["backlog", "todo", "doing", "revisit", "done", "archived"];
 const VALID_PRIORITY = ["low", "normal", "high"];
 
 export default {
@@ -50,7 +50,9 @@ export default {
 
   // Invoked by the Cron Trigger (see [triggers] in wrangler.toml).
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(Promise.all([sendDueReminders(env), sendRevisitReminders(env)]));
+    ctx.waitUntil(
+      Promise.all([sendDueReminders(env), sendRevisitReminders(env), archiveOldDoneTasks(env)])
+    );
   },
 };
 
@@ -64,7 +66,7 @@ async function sendDueReminders(env) {
 
   const { results } = await env.DB.prepare(
     `SELECT * FROM tasks
-     WHERE status NOT IN ('done', 'revisit')
+     WHERE status NOT IN ('done', 'revisit', 'archived')
        AND due_date IS NOT NULL
        AND due_date <= ?
        AND reminded_at IS NULL
@@ -147,10 +149,34 @@ async function sendRevisitReminders(env) {
   console.log(`Sent revisit reminder for ${ids.length} task(s).`);
 }
 
-// Calendar-month step: handles month lengths and year rollover (e.g. Jan 31 → Feb 28).
+// --- archiving ---------------------------------------------------------------
+
+// Tasks that have sat in 'done' for a month move to 'archived': they drop off
+// the board but stay in the database (and in the Archive panel) for reference.
+// done_at is left intact so the card can still show when it was finished.
+async function archiveOldDoneTasks(env) {
+  const cutoff = subOneMonth(new Date()).toISOString();
+
+  const { meta } = await env.DB.prepare(
+    `UPDATE tasks SET status = 'archived', updated_at = ?
+     WHERE status = 'done' AND done_at IS NOT NULL AND done_at <= ?`
+  )
+    .bind(new Date().toISOString(), cutoff)
+    .run();
+
+  if (meta.changes > 0) console.log(`Archived ${meta.changes} done task(s).`);
+}
+
+// Calendar-month steps: handle month lengths and year rollover (e.g. Jan 31 → Feb 28).
 function addOneMonth(iso) {
   const d = new Date(iso);
   d.setMonth(d.getMonth() + 1);
+  return d;
+}
+
+function subOneMonth(date) {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() - 1);
   return d;
 }
 
@@ -233,14 +259,26 @@ async function createTask(request, env) {
     priority: VALID_PRIORITY.includes(body.priority) ? body.priority : "normal",
     due_date: body.due_date || null,
   };
-  // Start the monthly-revisit clock if the task is created straight into 'revisit'.
+  // Start the monthly-revisit clock if the task is created straight into 'revisit',
+  // and the archive clock if it's created already done.
   const revisitAt = task.status === "revisit" ? now : null;
+  const doneAt = task.status === "done" ? now : null;
 
   const { meta } = await env.DB.prepare(
-    `INSERT INTO tasks (title, notes, status, priority, due_date, revisit_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (title, notes, status, priority, due_date, revisit_at, done_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
-    .bind(task.title, task.notes, task.status, task.priority, task.due_date, revisitAt, now, now)
+    .bind(
+      task.title,
+      task.notes,
+      task.status,
+      task.priority,
+      task.due_date,
+      revisitAt,
+      doneAt,
+      now,
+      now
+    )
     .run();
 
   const row = await env.DB.prepare("SELECT * FROM tasks WHERE id = ?")
@@ -280,6 +318,18 @@ async function updateTask(request, env, id) {
       fields.push("revisit_at = NULL");
       fields.push("revisit_reminded_at = NULL");
     }
+
+    if (body.status === "done") {
+      // Entering 'done' starts the one-month archive clock; re-saving a task
+      // that's already done keeps its original completion time.
+      fields.push("done_at = CASE WHEN status = 'done' THEN done_at ELSE ? END");
+      values.push(new Date().toISOString());
+    } else if (body.status !== "archived") {
+      // Moving back to an active column clears it. Archiving keeps done_at so
+      // the archived card can still say when it was finished.
+      fields.push("done_at = NULL");
+    }
+
     fields.push("status = ?");
     values.push(body.status);
   }

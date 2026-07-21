@@ -127,6 +127,29 @@
     }
     .col.drop-target .col-empty { border-color: var(--accent); opacity: 0.9; }
 
+    /* Archive: collapsed by default, sits under the board. Done tasks land here
+       automatically a month after they were completed. */
+    .archive { margin-top: 1.25rem; }
+    .archive > summary {
+      cursor: pointer; list-style: none;
+      display: flex; align-items: center; gap: 0.45rem;
+      font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
+      text-transform: uppercase; color: var(--muted);
+      padding: 0.5rem 0.2rem;
+    }
+    .archive > summary::-webkit-details-marker { display: none; }
+    .archive > summary::before { content: "▸"; font-size: 0.7rem; }
+    .archive[open] > summary::before { content: "▾"; }
+    .archive-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; padding: 0.3rem 0 0; }
+    .archive-item {
+      display: flex; align-items: center; gap: 0.6rem;
+      background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+      padding: 0.45rem 0.6rem; font-size: 0.84rem;
+    }
+    .archive-item .a-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .archive-item .a-when { color: var(--muted); font-size: 0.74rem; white-space: nowrap; }
+    .archive-empty { color: var(--muted); font-size: 0.78rem; padding: 0.4rem 0.2rem; }
+
     /* Card */
     .card {
       background: var(--card);
@@ -270,6 +293,11 @@
         <ul class="col-body"></ul>
       </section>
     </div>
+
+    <details class="archive" id="archive">
+      <summary><span>Archive</span><span class="col-count" id="archiveCount">0</span></summary>
+      <ul class="archive-list" id="archiveList"></ul>
+    </details>
   </div>
 
   <script>
@@ -280,7 +308,10 @@
       remove: (id)       => fetch(`/api/tasks/${id}`, { method: "DELETE" }).then(r => r.json()),
     };
 
+    // Board columns. 'archived' is deliberately absent: archived tasks live in
+    // the Archive panel below the board, not in a column.
     const STATUSES = ["backlog", "todo", "doing", "revisit", "done"];
+    const PICKER_STATUSES = [...STATUSES, "archived"];
 
     let tasks = [];
     let editingId = null;
@@ -294,6 +325,9 @@
       priority: document.getElementById("priority"),
       due: document.getElementById("due"),
       addBtn: document.getElementById("addBtn"),
+      archive: document.getElementById("archive"),
+      archiveList: document.getElementById("archiveList"),
+      archiveCount: document.getElementById("archiveCount"),
     };
 
     const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -310,9 +344,14 @@
       return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     }
 
+    const STATUS_LABELS = {
+      backlog: "Backlog", todo: "To Do", doing: "In Progress",
+      revisit: "To Be Revisited", done: "Done", archived: "Archived",
+    };
+
     function statusOptions(current) {
-      const labels = { backlog: "Backlog", todo: "To Do", doing: "In Progress", revisit: "To Be Revisited", done: "Done" };
-      return STATUSES.map(s =>
+      const labels = STATUS_LABELS;
+      return PICKER_STATUSES.map(s =>
         `<option value="${s}" ${s === current ? "selected" : ""}>${labels[s]}</option>`
       ).join("");
     }
@@ -365,7 +404,33 @@
         </li>`;
     }
 
+    // Archived rows are read-only apart from restore/delete — the point of the
+    // panel is a quiet record, not a sixth column.
+    function archiveItem(t) {
+      const when = t.done_at
+        ? `finished ${new Date(t.done_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+        : "";
+      return `
+        <li class="archive-item" data-id="${t.id}">
+          <span class="a-title">${esc(t.title)}</span>
+          <span class="a-when">${when}</span>
+          <button class="icon-btn restore" title="Restore to Done" type="button">↩</button>
+          <button class="icon-btn del" title="Delete" type="button">×</button>
+        </li>`;
+    }
+
+    function renderArchive() {
+      const items = tasks
+        .filter(t => t.status === "archived")
+        .sort((a, b) => (b.done_at || "").localeCompare(a.done_at || ""));
+      el.archiveCount.textContent = items.length;
+      el.archiveList.innerHTML = items.length
+        ? items.map(archiveItem).join("")
+        : `<li class="archive-empty">Nothing archived yet. Done tasks move here a month after they're completed.</li>`;
+    }
+
     function render() {
+      renderArchive();
       board.querySelectorAll(".col").forEach(col => {
         const status = col.dataset.status;
         const items = tasks.filter(t => t.status === status);
@@ -381,10 +446,12 @@
         if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
       }
 
-      const open = tasks.filter(t => t.status !== "done").length;
-      el.summary.textContent = tasks.length === 0
+      // Archived tasks are off the board, so they don't count towards either total.
+      const onBoard = tasks.filter(t => t.status !== "archived");
+      const open = onBoard.filter(t => t.status !== "done").length;
+      el.summary.textContent = onBoard.length === 0
         ? "No tasks yet"
-        : `${open} open · ${tasks.length} total`;
+        : `${open} open · ${onBoard.length} total`;
     }
 
     async function load() {
@@ -462,6 +529,23 @@
       render();
       await api.update(id, { status });
       await load();
+    });
+
+    // --- archive panel actions (restore / delete) ---
+    el.archiveList.addEventListener("click", async (e) => {
+      const row = e.target.closest(".archive-item");
+      if (!row) return;
+      const id = Number(row.dataset.id);
+
+      if (e.target.classList.contains("restore")) {
+        // Back to Done, which restarts the one-month archive clock server-side.
+        await api.update(id, { status: "done" });
+        await load();
+      } else if (e.target.classList.contains("del")) {
+        await api.remove(id);
+        tasks = tasks.filter(t => t.id !== id);
+        render();
+      }
     });
 
     // --- drag and drop between columns ---
